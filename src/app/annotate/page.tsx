@@ -40,8 +40,9 @@ export default function AnnotatePage() {
   );
   const [toast, setToast] = useState<string | null>(null);
   const [autosaved, setAutosaved] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // --- init: load active user + store ---
+  // --- init ---
   useEffect(() => {
     const user = getActiveUser();
     if (!user) {
@@ -53,7 +54,7 @@ export default function AnnotatePage() {
     setStore(loaded);
   }, [router]);
 
-  // --- when index or store changes, load labels for the current review ---
+  // --- load labels when review changes ---
   useEffect(() => {
     if (!store) return;
     const review = REVIEWS[index];
@@ -89,19 +90,18 @@ export default function AnnotatePage() {
     window.setTimeout(() => setToast(null), 1800);
   }
 
-  // Persist labels for the current review (autosave on every change).
   function persist(
     nextLabels: Record<AspectKey, SentimentLabel>,
     markSaved: boolean
   ) {
     if (!store) return;
-    const review = REVIEWS[index];
-    const prev = store.records[review.ID_Review];
+    const rev = REVIEWS[index];
+    const prev = store.records[rev.ID_Review];
     const nextStore: AnnotationStore = {
       ...store,
       records: {
         ...store.records,
-        [review.ID_Review]: {
+        [rev.ID_Review]: {
           labels: nextLabels,
           saved: markSaved || prev?.saved || false,
           annotated_at: new Date().toISOString(),
@@ -122,16 +122,16 @@ export default function AnnotatePage() {
 
   function handleSave() {
     persist(labels, true);
-    showToast("Tersimpan sebagai selesai");
+    showToast("Tersimpan ✓");
   }
 
   function handleResetCurrent() {
     const cleared = emptyLabels();
     setLabels(cleared);
     if (!store) return;
-    const review = REVIEWS[index];
+    const rev = REVIEWS[index];
     const nextRecords = { ...store.records };
-    delete nextRecords[review.ID_Review];
+    delete nextRecords[rev.ID_Review];
     const nextStore: AnnotationStore = { ...store, records: nextRecords };
     setStore(nextStore);
     saveStore(nextStore);
@@ -145,15 +145,18 @@ export default function AnnotatePage() {
   function handleExportCsv() {
     exportAnnotationsCsv(store!, REVIEWS);
     showToast("CSV diunduh");
+    setMenuOpen(false);
   }
 
   function handleBackup() {
     exportBackupJson(store!);
     showToast("Backup JSON diunduh");
+    setMenuOpen(false);
   }
 
   function handleImportClick() {
     fileInputRef.current?.click();
+    setMenuOpen(false);
   }
 
   async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -164,8 +167,8 @@ export default function AnnotatePage() {
       const imported = parseBackupJson(text, annotator);
       setStore(imported);
       saveStore(imported);
-      const review = REVIEWS[index];
-      const rec = imported.records[review.ID_Review];
+      const rev = REVIEWS[index];
+      const rec = imported.records[rev.ID_Review];
       setLabels(rec ? { ...rec.labels } : emptyLabels());
       showToast("Backup berhasil diimport");
     } catch (err) {
@@ -180,117 +183,205 @@ export default function AnnotatePage() {
     router.replace("/");
   }
 
+  const isFirst = index === 0;
+  const isLast = index === REVIEWS.length - 1;
+
   return (
-    <main className="container">
-      <header className="app-header">
-        <div className="who">
-          <span className="role">{annotatorLabel}</span>
-          <span className="hint">
-            Anotasi independen · jawaban tersimpan otomatis di browser
-          </span>
-        </div>
-        <div className="header-actions">
-          <button className="btn btn-sm" onClick={handleExportCsv}>
-            Export CSV
-          </button>
-          <button className="btn btn-sm" onClick={handleBackup}>
-            Backup JSON
-          </button>
-          <button className="btn btn-sm" onClick={handleImportClick}>
-            Import JSON
-          </button>
-          <button className="btn btn-sm btn-ghost" onClick={handleSwitchUser}>
-            Ganti user
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/json"
-            style={{ display: "none" }}
-            onChange={handleImportFile}
-          />
-        </div>
-      </header>
-
-      <ProgressPanel
-        reviews={REVIEWS}
-        completed={completed}
-        currentIndex={index}
-        onJump={(i) => setIndex(i)}
-      />
-
-      <div className="card" style={{ marginTop: 20 }}>
+    <>
+      {/* ── Mobile menu overlay ── */}
+      {menuOpen && (
         <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 12,
-          }}
-        >
-          <h2 style={{ margin: 0, fontSize: "1.1rem" }}>
-            Review {index + 1} dari {REVIEWS.length}
-          </h2>
-          {autosaved && (
-            <span className="autosave">
-              <span className="dot" /> Autosaved
+          className="header-menu-overlay"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+
+      {/* ── Mobile dropdown menu ── */}
+      {menuOpen && (
+        <div className="header-menu-dropdown">
+          <div className="menu-header">
+            <span className="menu-title">{annotatorLabel}</span>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setMenuOpen(false)}
+            >
+              ✕
+            </button>
+          </div>
+          <hr className="divider" style={{ margin: "4px 0 8px" }} />
+          <button className="btn btn-block" onClick={handleExportCsv}>
+            📥 Export CSV
+          </button>
+          <button className="btn btn-block" onClick={handleBackup}>
+            💾 Backup JSON
+          </button>
+          <button className="btn btn-block" onClick={handleImportClick}>
+            📂 Import JSON
+          </button>
+          <hr className="divider" style={{ margin: "4px 0" }} />
+          <button
+            className="btn btn-block btn-ghost"
+            onClick={handleSwitchUser}
+          >
+            🔄 Ganti user
+          </button>
+        </div>
+      )}
+
+      <main className="container" style={{ position: "relative" }}>
+        {/* ── Header ── */}
+        <header className="app-header">
+          <div className="who">
+            <span className="role">{annotatorLabel}</span>
+            <span className="hint">Jawaban tersimpan otomatis di browser</span>
+          </div>
+
+          {/* Desktop actions */}
+          <div className="header-actions">
+            <button className="btn btn-sm" onClick={handleExportCsv}>
+              Export CSV
+            </button>
+            <button className="btn btn-sm" onClick={handleBackup}>
+              Backup JSON
+            </button>
+            <button className="btn btn-sm" onClick={handleImportClick}>
+              Import JSON
+            </button>
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={handleSwitchUser}
+            >
+              Ganti user
+            </button>
+          </div>
+
+          {/* Mobile hamburger */}
+          <button
+            className="header-menu-btn"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="Menu"
+          >
+            ☰
+          </button>
+        </header>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json"
+          style={{ display: "none" }}
+          onChange={handleImportFile}
+        />
+
+        {/* ── Progress ── */}
+        <ProgressPanel
+          reviews={REVIEWS}
+          completed={completed}
+          currentIndex={index}
+          onJump={(i) => setIndex(i)}
+        />
+
+        {/* ── Review card ── */}
+        <div className="card" style={{ marginTop: 16 }}>
+          {/* Title row */}
+          <div className="review-header-row">
+            <h2>
+              Review {index + 1}{" "}
+              <span className="muted" style={{ fontWeight: 400 }}>
+                dari {REVIEWS.length}
+              </span>
+            </h2>
+            {autosaved && (
+              <span className="autosave">
+                <span className="dot" /> Autosaved
+              </span>
+            )}
+          </div>
+
+          {/* Meta */}
+          <div className="review-meta">
+            <span>
+              <b>ID:</b> {review.ID_Review}
             </span>
-          )}
-        </div>
-
-        <div className="review-meta">
-          <span>
-            <b>ID:</b> {review.ID_Review}
-          </span>
-          <span>
-            <b>Platform:</b> {review.Platform}
-          </span>
-          <span>
-            <b>Hotel:</b> {review.Nama_Hotel}
-          </span>
-          <span>
-            <b>Tanggal:</b> {review.Review_Date}
-          </span>
-        </div>
-
-        <div className="review-text">{review.Text_Review}</div>
-
-        <div className="instruction">
-          Silakan beri label sentimen untuk setiap aspek berdasarkan isi review.
-          Pilih <b>None</b> apabila aspek tidak dibahas.
-        </div>
-
-        <AspectForm labels={labels} onChange={handleChange} />
-
-        <div className="nav-bar">
-          <div className="nav-left">
-            <button
-              className="btn"
-              onClick={() => go(-1)}
-              disabled={index === 0}
-            >
-              ← Previous
-            </button>
-            <button
-              className="btn"
-              onClick={() => go(1)}
-              disabled={index === REVIEWS.length - 1}
-            >
-              Next →
-            </button>
+            <span>
+              <b>Platform:</b> {review.Platform}
+            </span>
+            <span>
+              <b>Hotel:</b> {review.Nama_Hotel}
+            </span>
+            <span>
+              <b>Tanggal:</b> {review.Review_Date}
+            </span>
           </div>
-          <div className="nav-right">
-            <button className="btn btn-ghost" onClick={handleResetCurrent}>
-              Reset review ini
-            </button>
-            <button className="btn btn-primary" onClick={handleSave}>
-              Simpan
-            </button>
+
+          {/* Review text */}
+          <div className="review-text">{review.Text_Review}</div>
+
+          {/* Instruction */}
+          <div className="instruction">
+            Silakan beri label sentimen untuk setiap aspek berdasarkan isi
+            review. Pilih <b>None</b> apabila aspek tidak dibahas.
+          </div>
+
+          {/* Aspect form */}
+          <AspectForm labels={labels} onChange={handleChange} />
+
+          {/* Desktop nav (hidden on mobile — replaced by bottom bar) */}
+          <div className="nav-bar">
+            <div className="nav-left">
+              <button
+                className="btn"
+                onClick={() => go(-1)}
+                disabled={isFirst}
+              >
+                ← Previous
+              </button>
+              <button
+                className="btn"
+                onClick={() => go(1)}
+                disabled={isLast}
+              >
+                Next →
+              </button>
+            </div>
+            <div className="nav-right">
+              <button className="btn btn-ghost" onClick={handleResetCurrent}>
+                Reset review ini
+              </button>
+              <button className="btn btn-primary" onClick={handleSave}>
+                Simpan
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </main>
 
+      {/* ── Mobile sticky bottom nav ── */}
+      <nav className="bottom-nav">
+        <button
+          className="btn nav-prev"
+          onClick={() => go(-1)}
+          disabled={isFirst}
+        >
+          ← Prev
+        </button>
+        <button
+          className="btn btn-primary nav-save"
+          onClick={handleSave}
+        >
+          Simpan ✓
+        </button>
+        <button
+          className="btn nav-next"
+          onClick={() => go(1)}
+          disabled={isLast}
+        >
+          Next →
+        </button>
+      </nav>
+
+      {/* ── Toast ── */}
       {toast && <div className="toast">{toast}</div>}
-    </main>
+    </>
   );
 }
