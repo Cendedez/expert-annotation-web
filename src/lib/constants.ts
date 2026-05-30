@@ -21,13 +21,13 @@ export const ANNOTATORS: { id: AnnotatorId; label: string; description: string }
   },
   {
     id: "expert_1",
-    label: "Expert 1",
-    description: "Domain expert pertama.",
+    label: "Hengky Kurniadi",
+    description: "Domain expert 1.",
   },
   {
     id: "expert_2",
-    label: "Expert 2",
-    description: "Domain expert kedua.",
+    label: "John Doe",
+    description: "Domain expert 2.",
   },
 ];
 

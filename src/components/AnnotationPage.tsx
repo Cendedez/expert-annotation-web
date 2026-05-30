@@ -1,18 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import reviewsData from "@/data/annotation_reviews.json";
 import AspectForm from "@/components/AspectForm";
 import ProgressPanel from "@/components/ProgressPanel";
 import { ANNOTATORS } from "@/lib/constants";
-import {
-  emptyLabels,
-  getActiveUser,
-  clearActiveUser,
-  loadStore,
-  saveStore,
-} from "@/lib/storage";
+import { emptyLabels, loadStore, saveStore } from "@/lib/storage";
 import {
   exportAnnotationsCsv,
   exportBackupJson,
@@ -28,11 +21,20 @@ import type {
 
 const REVIEWS = reviewsData as ReviewItem[];
 
-export default function AnnotatePage() {
-  const router = useRouter();
+interface Props {
+  annotatorId: AnnotatorId;
+  /** If true, show "Ganti user" button (only for researcher). */
+  showSwitchUser?: boolean;
+  onSwitchUser?: () => void;
+}
+
+export default function AnnotationPage({
+  annotatorId,
+  showSwitchUser = false,
+  onSwitchUser,
+}: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [annotator, setAnnotator] = useState<AnnotatorId | null>(null);
   const [store, setStore] = useState<AnnotationStore | null>(null);
   const [index, setIndex] = useState(0);
   const [labels, setLabels] = useState<Record<AspectKey, SentimentLabel>>(
@@ -44,15 +46,9 @@ export default function AnnotatePage() {
 
   // --- init ---
   useEffect(() => {
-    const user = getActiveUser();
-    if (!user) {
-      router.replace("/");
-      return;
-    }
-    setAnnotator(user);
-    const loaded = loadStore(user);
+    const loaded = loadStore(annotatorId);
     setStore(loaded);
-  }, [router]);
+  }, [annotatorId]);
 
   // --- load labels when review changes ---
   useEffect(() => {
@@ -66,6 +62,18 @@ export default function AnnotatePage() {
   const completed = useMemo(() => {
     const set = new Set<string>();
     if (store) {
+      for (const [, rec] of Object.entries(store.records)) {
+        if (rec.saved) set.add(Object.keys(store.records).find(k => store.records[k] === rec) || "");
+      }
+      // simpler approach
+    }
+    return set;
+  }, [store]);
+
+  // Better completed calculation
+  const completedSet = useMemo(() => {
+    const set = new Set<string>();
+    if (store) {
       for (const [id, rec] of Object.entries(store.records)) {
         if (rec.saved) set.add(id);
       }
@@ -73,7 +81,7 @@ export default function AnnotatePage() {
     return set;
   }, [store]);
 
-  if (!annotator || !store) {
+  if (!store) {
     return (
       <main className="container">
         <p className="muted">Memuat…</p>
@@ -83,7 +91,7 @@ export default function AnnotatePage() {
 
   const review = REVIEWS[index];
   const annotatorLabel =
-    ANNOTATORS.find((a) => a.id === annotator)?.label ?? annotator;
+    ANNOTATORS.find((a) => a.id === annotatorId)?.label ?? annotatorId;
 
   function showToast(msg: string) {
     setToast(msg);
@@ -161,10 +169,10 @@ export default function AnnotatePage() {
 
   async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file || !annotator) return;
+    if (!file) return;
     try {
       const text = await file.text();
-      const imported = parseBackupJson(text, annotator);
+      const imported = parseBackupJson(text, annotatorId);
       setStore(imported);
       saveStore(imported);
       const rev = REVIEWS[index];
@@ -178,17 +186,12 @@ export default function AnnotatePage() {
     }
   }
 
-  function handleSwitchUser() {
-    clearActiveUser();
-    router.replace("/");
-  }
-
   const isFirst = index === 0;
   const isLast = index === REVIEWS.length - 1;
 
   return (
     <>
-      {/* ── Mobile menu overlay ── */}
+      {/* Mobile menu overlay */}
       {menuOpen && (
         <div
           className="header-menu-overlay"
@@ -196,7 +199,7 @@ export default function AnnotatePage() {
         />
       )}
 
-      {/* ── Mobile dropdown menu ── */}
+      {/* Mobile dropdown menu */}
       {menuOpen && (
         <div className="header-menu-dropdown">
           <div className="menu-header">
@@ -218,18 +221,22 @@ export default function AnnotatePage() {
           <button className="btn btn-block" onClick={handleImportClick}>
             📂 Import JSON
           </button>
-          <hr className="divider" style={{ margin: "4px 0" }} />
-          <button
-            className="btn btn-block btn-ghost"
-            onClick={handleSwitchUser}
-          >
-            🔄 Ganti user
+          <button className="btn btn-block btn-ghost" onClick={handleResetCurrent}>
+            🔄 Reset review ini
           </button>
+          {showSwitchUser && onSwitchUser && (
+            <>
+              <hr className="divider" style={{ margin: "4px 0" }} />
+              <button className="btn btn-block btn-ghost" onClick={onSwitchUser}>
+                👤 Ganti user
+              </button>
+            </>
+          )}
         </div>
       )}
 
       <main className="container" style={{ position: "relative" }}>
-        {/* ── Header ── */}
+        {/* Header */}
         <header className="app-header">
           <div className="who">
             <span className="role">{annotatorLabel}</span>
@@ -247,12 +254,14 @@ export default function AnnotatePage() {
             <button className="btn btn-sm" onClick={handleImportClick}>
               Import JSON
             </button>
-            <button
-              className="btn btn-sm btn-ghost"
-              onClick={handleSwitchUser}
-            >
-              Ganti user
+            <button className="btn btn-sm btn-ghost" onClick={handleResetCurrent}>
+              Reset
             </button>
+            {showSwitchUser && onSwitchUser && (
+              <button className="btn btn-sm btn-ghost" onClick={onSwitchUser}>
+                Ganti user
+              </button>
+            )}
           </div>
 
           {/* Mobile hamburger */}
@@ -273,17 +282,16 @@ export default function AnnotatePage() {
           onChange={handleImportFile}
         />
 
-        {/* ── Progress ── */}
+        {/* Progress */}
         <ProgressPanel
           reviews={REVIEWS}
-          completed={completed}
+          completed={completedSet}
           currentIndex={index}
           onJump={(i) => setIndex(i)}
         />
 
-        {/* ── Review card ── */}
+        {/* Review card */}
         <div className="card" style={{ marginTop: 16 }}>
-          {/* Title row */}
           <div className="review-header-row">
             <h2>
               Review {index + 1}{" "}
@@ -298,89 +306,54 @@ export default function AnnotatePage() {
             )}
           </div>
 
-          {/* Meta */}
           <div className="review-meta">
-            <span>
-              <b>ID:</b> {review.ID_Review}
-            </span>
-            <span>
-              <b>Platform:</b> {review.Platform}
-            </span>
-            <span>
-              <b>Hotel:</b> {review.Nama_Hotel}
-            </span>
-            <span>
-              <b>Tanggal:</b> {review.Review_Date}
-            </span>
+            <span><b>ID:</b> {review.ID_Review}</span>
+            <span><b>Platform:</b> {review.Platform}</span>
+            <span><b>Hotel:</b> {review.Nama_Hotel}</span>
+            <span><b>Tanggal:</b> {review.Review_Date}</span>
           </div>
 
-          {/* Review text */}
           <div className="review-text">{review.Text_Review}</div>
 
-          {/* Instruction */}
           <div className="instruction">
             Silakan beri label sentimen untuk setiap aspek berdasarkan isi
             review. Pilih <b>None</b> apabila aspek tidak dibahas.
           </div>
 
-          {/* Aspect form */}
           <AspectForm labels={labels} onChange={handleChange} />
 
-          {/* Desktop nav (hidden on mobile — replaced by bottom bar) */}
+          {/* Desktop nav */}
           <div className="nav-bar">
             <div className="nav-left">
-              <button
-                className="btn"
-                onClick={() => go(-1)}
-                disabled={isFirst}
-              >
+              <button className="btn" onClick={() => go(-1)} disabled={isFirst}>
                 ← Previous
               </button>
-              <button
-                className="btn"
-                onClick={() => go(1)}
-                disabled={isLast}
-              >
+              <button className="btn" onClick={() => go(1)} disabled={isLast}>
                 Next →
               </button>
             </div>
             <div className="nav-right">
-              <button className="btn btn-ghost" onClick={handleResetCurrent}>
-                Reset review ini
-              </button>
               <button className="btn btn-primary" onClick={handleSave}>
-                Simpan
+                Simpan ✓
               </button>
             </div>
           </div>
         </div>
       </main>
 
-      {/* ── Mobile sticky bottom nav ── */}
+      {/* Mobile sticky bottom nav */}
       <nav className="bottom-nav">
-        <button
-          className="btn nav-prev"
-          onClick={() => go(-1)}
-          disabled={isFirst}
-        >
+        <button className="btn nav-prev" onClick={() => go(-1)} disabled={isFirst}>
           ← Prev
         </button>
-        <button
-          className="btn btn-primary nav-save"
-          onClick={handleSave}
-        >
+        <button className="btn btn-primary nav-save" onClick={handleSave}>
           Simpan ✓
         </button>
-        <button
-          className="btn nav-next"
-          onClick={() => go(1)}
-          disabled={isLast}
-        >
+        <button className="btn nav-next" onClick={() => go(1)} disabled={isLast}>
           Next →
         </button>
       </nav>
 
-      {/* ── Toast ── */}
       {toast && <div className="toast">{toast}</div>}
     </>
   );

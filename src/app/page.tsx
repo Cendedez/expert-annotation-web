@@ -1,17 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ANNOTATORS } from "@/lib/constants";
-import { setActiveUser } from "@/lib/storage";
-import type { AnnotatorId } from "@/lib/types";
 
 export default function LandingPage() {
   const router = useRouter();
-
-  function choose(id: AnnotatorId) {
-    setActiveUser(id);
-    router.push("/annotate");
-  }
 
   return (
     <main className="landing">
@@ -23,25 +15,46 @@ export default function LandingPage() {
         </p>
 
         <div className="user-list">
-          {ANNOTATORS.map((a) => (
-            <button
-              key={a.id}
-              className="user-option"
-              onClick={() => choose(a.id)}
-            >
-              <span>
-                <span className="label">{a.label}</span>
-                <br />
-                <span className="desc">{a.description}</span>
-              </span>
-              <span className="arrow">→</span>
-            </button>
-          ))}
+          <button
+            className="user-option"
+            onClick={() => router.push("/researcher")}
+          >
+            <span>
+              <span className="label">Researcher</span>
+              <br />
+              <span className="desc">Peneliti utama — bisa lihat progress semua user.</span>
+            </span>
+            <span className="arrow">→</span>
+          </button>
+
+          <button
+            className="user-option"
+            onClick={() => router.push("/expert1")}
+          >
+            <span>
+              <span className="label">Hengky Kurniadi</span>
+              <br />
+              <span className="desc">Domain Expert 1</span>
+            </span>
+            <span className="arrow">→</span>
+          </button>
+
+          <button
+            className="user-option"
+            onClick={() => router.push("/expert2")}
+          >
+            <span>
+              <span className="label">John Doe</span>
+              <br />
+              <span className="desc">Domain Expert 2</span>
+            </span>
+            <span className="arrow">→</span>
+          </button>
         </div>
 
         <p className="muted" style={{ fontSize: "0.8rem", marginTop: 24 }}>
           Setiap user mengerjakan 100 review yang sama. Jawaban disimpan otomatis
-          di browser ini (localStorage) dan dapat diekspor ke CSV.
+          di browser (localStorage) dan dapat diekspor ke CSV.
         </p>
       </div>
     </main>
