@@ -66,14 +66,15 @@ export default function AnnotationPage({
 
     (async () => {
       setSyncState("syncing");
-      const server = await pullStore(annotatorId);
+      const result = await pullStore(annotatorId);
       if (cancelled) return;
-      if (server === null) {
+      if (result.status === "disabled") {
         // sync disabled or unreachable -> work offline with local only
         setSyncState("disabled");
         return;
       }
-      const merged = mergeStores(local, server);
+      // sync works; server store may be null when nothing saved yet
+      const merged = result.store ? mergeStores(local, result.store) : local;
       setStore(merged);
       saveStore(merged);
       // push merged back so server has the union too
