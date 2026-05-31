@@ -71,3 +71,28 @@ export function clearActiveUser(): void {
 export function countCompleted(store: AnnotationStore): number {
   return Object.values(store.records).filter((r) => r.saved).length;
 }
+
+// Merge two stores at the record level, keeping the newest annotated_at per review.
+// Used to reconcile local cache with the server copy.
+export function mergeStores(
+  a: AnnotationStore,
+  b: AnnotationStore
+): AnnotationStore {
+  const records: AnnotationStore["records"] = { ...a.records };
+  for (const [reviewId, recB] of Object.entries(b.records)) {
+    const recA = records[reviewId];
+    if (!recA) {
+      records[reviewId] = recB;
+      continue;
+    }
+    const tA = recA.annotated_at ? Date.parse(recA.annotated_at) : 0;
+    const tB = recB.annotated_at ? Date.parse(recB.annotated_at) : 0;
+    records[reviewId] = tB >= tA ? recB : recA;
+  }
+  return {
+    annotator_id: a.annotator_id,
+    version: Math.max(a.version, b.version),
+    records,
+    updated_at: new Date().toISOString(),
+  };
+}

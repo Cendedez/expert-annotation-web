@@ -1,0 +1,43 @@
+import { NextResponse } from "next/server";
+import { getSupabase, ANNOTATIONS_TABLE } from "@/lib/supabaseServer";
+import type { AnnotationStore } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
+
+// GET /api/progress -> live completed counts for all annotators from the server.
+export async function GET() {
+  const sb = getSupabase();
+  if (!sb) {
+    return NextResponse.json(
+      { error: "sync_disabled", message: "Supabase belum dikonfigurasi." },
+      { status: 503 }
+    );
+  }
+
+  const { data, error } = await sb
+    .from(ANNOTATIONS_TABLE)
+    .select("annotator_id, store, updated_at");
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const progress: Record<
+    string,
+    { completed: number; updated_at: string | null }
+  > = {};
+
+  for (const row of data ?? []) {
+    const store = row.store as AnnotationStore | null;
+    let completed = 0;
+    if (store && store.records) {
+      completed = Object.values(store.records).filter((r) => r.saved).length;
+    }
+    progress[row.annotator_id] = {
+      completed,
+      updated_at: row.updated_at ?? null,
+    };
+  }
+
+  return NextResponse.json({ progress });
+}

@@ -1,11 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import reviewsData from "@/data/annotation_reviews.json";
 import AspectForm from "@/components/AspectForm";
 import ProgressPanel from "@/components/ProgressPanel";
 import { ANNOTATORS } from "@/lib/constants";
-import { emptyLabels, loadStore, saveStore } from "@/lib/storage";
+import {
+  emptyLabels,
+  loadStore,
+  saveStore,
+  mergeStores,
+} from "@/lib/storage";
+import { pullStore, pushStore, type SyncState } from "@/lib/sync";
 import {
   exportAnnotationsCsv,
   exportBackupJson,
@@ -34,6 +40,8 @@ export default function AnnotationPage({
   onSwitchUser,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const storeRef = useRef<AnnotationStore | null>(null);
+  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [store, setStore] = useState<AnnotationStore | null>(null);
   const [index, setIndex] = useState(0);
@@ -43,11 +51,44 @@ export default function AnnotationPage({
   const [toast, setToast] = useState<string | null>(null);
   const [autosaved, setAutosaved] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [syncState, setSyncState] = useState<SyncState>("idle");
 
-  // --- init ---
+  // keep a ref of the latest store for debounced push
   useEffect(() => {
-    const loaded = loadStore(annotatorId);
-    setStore(loaded);
+    storeRef.current = store;
+  }, [store]);
+
+  // --- init: load local, then pull+merge from server ---
+  useEffect(() => {
+    let cancelled = false;
+    const local = loadStore(annotatorId);
+    setStore(local);
+
+    (async () => {
+      setSyncState("syncing");
+      const server = await pullStore(annotatorId);
+      if (cancelled) return;
+      if (server === null) {
+        // sync disabled or unreachable -> work offline with local only
+        setSyncState("disabled");
+        return;
+      }
+      const merged = mergeStores(local, server);
+      setStore(merged);
+      saveStore(merged);
+      // push merged back so server has the union too
+      const confirmed = await pushStore(annotatorId, merged);
+      if (cancelled) return;
+      if (confirmed) {
+        setStore(confirmed);
+        saveStore(confirmed);
+      }
+      setSyncState("synced");
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [annotatorId]);
 
   // --- load labels when review changes ---
@@ -59,18 +100,6 @@ export default function AnnotationPage({
     setLabels(rec ? { ...rec.labels } : emptyLabels());
   }, [index, store]);
 
-  const completed = useMemo(() => {
-    const set = new Set<string>();
-    if (store) {
-      for (const [, rec] of Object.entries(store.records)) {
-        if (rec.saved) set.add(Object.keys(store.records).find(k => store.records[k] === rec) || "");
-      }
-      // simpler approach
-    }
-    return set;
-  }, [store]);
-
-  // Better completed calculation
   const completedSet = useMemo(() => {
     const set = new Set<string>();
     if (store) {
@@ -80,6 +109,28 @@ export default function AnnotationPage({
     }
     return set;
   }, [store]);
+
+  // Debounced push to server.
+  const schedulePush = useCallback(
+    (s: AnnotationStore) => {
+      if (syncState === "disabled") return;
+      if (pushTimer.current) clearTimeout(pushTimer.current);
+      pushTimer.current = setTimeout(async () => {
+        setSyncState("syncing");
+        const confirmed = await pushStore(annotatorId, s);
+        if (confirmed) {
+          // merge server's view back (in case another device added records)
+          const merged = mergeStores(storeRef.current ?? s, confirmed);
+          setStore(merged);
+          saveStore(merged);
+          setSyncState("synced");
+        } else {
+          setSyncState("offline");
+        }
+      }, 800);
+    },
+    [annotatorId, syncState]
+  );
 
   if (!store) {
     return (
@@ -120,6 +171,7 @@ export default function AnnotationPage({
     saveStore(nextStore);
     setAutosaved(true);
     window.setTimeout(() => setAutosaved(false), 1200);
+    schedulePush(nextStore);
   }
 
   function handleChange(aspect: AspectKey, value: SentimentLabel) {
@@ -140,9 +192,14 @@ export default function AnnotationPage({
     const rev = REVIEWS[index];
     const nextRecords = { ...store.records };
     delete nextRecords[rev.ID_Review];
-    const nextStore: AnnotationStore = { ...store, records: nextRecords };
+    const nextStore: AnnotationStore = {
+      ...store,
+      records: nextRecords,
+      updated_at: new Date().toISOString(),
+    };
     setStore(nextStore);
     saveStore(nextStore);
+    schedulePush(nextStore);
     showToast("Review ini direset");
   }
 
@@ -173,10 +230,13 @@ export default function AnnotationPage({
     try {
       const text = await file.text();
       const imported = parseBackupJson(text, annotatorId);
-      setStore(imported);
-      saveStore(imported);
+      const base = storeRef.current ?? imported;
+      const merged = mergeStores(base, imported);
+      setStore(merged);
+      saveStore(merged);
+      schedulePush(merged);
       const rev = REVIEWS[index];
-      const rec = imported.records[rev.ID_Review];
+      const rec = merged.records[rev.ID_Review];
       setLabels(rec ? { ...rec.labels } : emptyLabels());
       showToast("Backup berhasil diimport");
     } catch (err) {
@@ -188,6 +248,15 @@ export default function AnnotationPage({
 
   const isFirst = index === 0;
   const isLast = index === REVIEWS.length - 1;
+
+  // Sync status label
+  const syncLabel: Record<SyncState, { text: string; color: string }> = {
+    idle: { text: "", color: "var(--text-muted)" },
+    syncing: { text: "Menyinkronkan…", color: "var(--warning)" },
+    synced: { text: "Tersinkron ke server ✓", color: "var(--success)" },
+    offline: { text: "Offline — tersimpan lokal", color: "var(--danger)" },
+    disabled: { text: "Mode lokal (tanpa server)", color: "var(--text-muted)" },
+  };
 
   return (
     <>
@@ -240,7 +309,12 @@ export default function AnnotationPage({
         <header className="app-header">
           <div className="who">
             <span className="role">{annotatorLabel}</span>
-            <span className="hint">Jawaban tersimpan otomatis di browser</span>
+            <span
+              className="hint"
+              style={{ color: syncLabel[syncState].color }}
+            >
+              {syncLabel[syncState].text || "Jawaban tersimpan otomatis"}
+            </span>
           </div>
 
           {/* Desktop actions */}

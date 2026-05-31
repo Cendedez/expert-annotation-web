@@ -17,9 +17,39 @@ penilaian setiap expert tidak bias.
 ## Teknologi
 
 - Next.js 14 (App Router) + TypeScript
-- localStorage untuk autosave (tanpa backend/database)
+- **Supabase** (Postgres) untuk sinkronisasi lintas-perangkat — opsional
+- localStorage sebagai cache instan + fallback offline
 - Export CSV & backup JSON (implementasi manual, aman terhadap koma/kutip)
 - Vercel-ready
+
+> **Sinkronisasi:** Jika Supabase dikonfigurasi, jawaban tiap annotator tersimpan
+> di server sehingga bisa dibuka dari HP maupun laptop dan progress-nya tergabung.
+> Researcher dapat memantau progress semua expert secara real-time lewat Dashboard.
+> Jika Supabase TIDAK dikonfigurasi, aplikasi otomatis jalan "mode lokal"
+> (localStorage saja) tanpa error.
+
+---
+
+## Setup Supabase (untuk sinkronisasi lintas-perangkat)
+
+1. Buat akun gratis di [supabase.com](https://supabase.com) → **New Project**.
+2. Buka **SQL Editor** → New query → tempel isi file `supabase_setup.sql` → **Run**.
+   Ini membuat tabel `annotations`.
+3. Buka **Project Settings → API**, salin:
+   - **Project URL** → jadi `SUPABASE_URL`
+   - **service_role** key (bagian *Project API keys*) → jadi `SUPABASE_SERVICE_ROLE_KEY`
+4. **Lokal:** buat file `.env.local` (contoh ada di `.env.example`):
+
+   ```
+   SUPABASE_URL=https://xxxx.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
+   ```
+
+5. **Vercel:** Project Settings → **Environment Variables** → tambahkan kedua
+   variabel di atas (untuk Production & Preview) → **Redeploy**.
+
+> `service_role` key hanya dipakai di API routes (server). Tidak pernah dikirim
+> ke browser, jadi expert tidak bisa mengakses data expert lain dari klien.
 
 ---
 
