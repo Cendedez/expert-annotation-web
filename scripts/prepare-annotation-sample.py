@@ -2,6 +2,9 @@
 Prepare 100 review sample for expert annotation.
 
 - Reads the labeled dataset to find reviews that have >= 1 aspect labeled.
+- Applies a QUALITY FILTER so only human-understandable reviews are eligible
+  (no truncation markers like "selengkapnya"/"lihat lebih sedikit", no #NAME?
+  errors, no overly-short or noisy text).
 - Samples 100 review_ids with a FIXED random seed (reproducible).
 - Joins with the clean dataset to get the display text/metadata.
 - Writes src/data/annotation_reviews.json WITHOUT any label info.
@@ -17,13 +20,35 @@ import csv
 import json
 import os
 import random
+import re
 
 # --- configuration ---
 SEED = 42
 SAMPLE_SIZE = 100
+MIN_LEN = 40   # minimum characters for a review to be understandable
+MIN_WORDS = 6  # minimum word count
 ASPECTS = ["Kenyamanan", "Kebersihan", "Pelayanan", "Harga", "Lokasi", "Fasilitas", "Makanan"]
 
-# Resolve paths relative to the ABSA project root (two levels up from this script).
+# Truncation / scraping artefacts that make a review confusing to annotate.
+# These typically appear at (or near) the END of a cut-off review.
+TRUNCATION_TAIL = [
+    "selengkapnya",
+    "baca selengkapnya",
+    "lihat lebih sedikit",
+    "lihat lebih banyak",
+    "lihat selengkapnya",
+    "tampilkan lebih sedikit",
+    "tampilkan lebih banyak",
+    "show more",
+    "show less",
+    "see more",
+    "see less",
+    "read more",
+]
+
+# Hard junk that should never be annotated.
+JUNK_EXACT = {"#name?", "#value!", "#ref!", "#n/a", "null", "none", "-", ".", ""}
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)                 # expert-annotation-web
 ABSA_ROOT = os.path.dirname(PROJECT_ROOT)                  # ABSA Hotel Santika
@@ -38,6 +63,41 @@ def read_csv(path):
         return list(csv.DictReader(f))
 
 
+def is_good_quality(text):
+    """Return True if the review text is clean enough for human annotation."""
+    t = (text or "").strip()
+    low = t.lower()
+
+    # 1. Junk / formula errors
+    if low in JUNK_EXACT:
+        return False
+    if low.startswith("#") and low.endswith("?"):
+        return False
+
+    # 2. Truncation markers (cut-off reviews are confusing)
+    for m in TRUNCATION_TAIL:
+        # marker anywhere is suspicious; truncation usually sits in the last 30 chars
+        if m in low:
+            return False
+    # standalone "selengkapnya" / ellipsis at the end
+    if low.rstrip(" .…").endswith("dst") or low.endswith("…") or low.endswith("..."):
+        return False
+
+    # 3. Length / word-count thresholds (must have enough content)
+    if len(t) < MIN_LEN:
+        return False
+    words = re.findall(r"\w+", low)
+    if len(words) < MIN_WORDS:
+        return False
+
+    # 4. Mostly non-letters (e.g. emoji/symbol spam)
+    letters = sum(c.isalpha() for c in t)
+    if letters < len(t) * 0.5:
+        return False
+
+    return True
+
+
 def main():
     labeled = read_csv(LABELED_CSV)
     clean = read_csv(CLEAN_CSV)
@@ -49,19 +109,25 @@ def main():
         if rid:
             clean_map[rid] = row
 
-    # Keep only labeled reviews that have at least one non-empty aspect
-    # AND exist in the clean dataset.
+    # Eligibility: labeled (>=1 aspect) AND present in clean AND good quality text.
     eligible_ids = []
+    skipped_quality = 0
     for row in labeled:
         rid = str(row.get("ID_Review", "")).strip()
         if not rid or rid not in clean_map:
             continue
         has_aspect = any((row.get(a) or "").strip() for a in ASPECTS)
-        if has_aspect:
-            eligible_ids.append(rid)
+        if not has_aspect:
+            continue
+        text = clean_map[rid].get("text_review", "")
+        if not is_good_quality(text):
+            skipped_quality += 1
+            continue
+        eligible_ids.append(rid)
 
     eligible_ids = sorted(set(eligible_ids), key=lambda x: int(x))
-    print(f"Eligible reviews (>=1 aspect & in clean): {len(eligible_ids)}")
+    print(f"Eligible reviews (>=1 aspect, in clean, good quality): {len(eligible_ids)}")
+    print(f"Skipped due to low quality / truncation / junk        : {skipped_quality}")
 
     # Reproducible sampling.
     rng = random.Random(SEED)
@@ -71,7 +137,6 @@ def main():
         sampled = rng.sample(eligible_ids, SAMPLE_SIZE)
     sampled = sorted(sampled, key=lambda x: int(x))
 
-    # Build output using clean dataset for display fields (no labels included).
     out = []
     for rid in sampled:
         c = clean_map[rid]
