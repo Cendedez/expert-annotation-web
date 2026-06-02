@@ -21,12 +21,16 @@ import json
 import os
 import random
 import re
+from datetime import date, datetime
 
 # --- configuration ---
 SEED = 42
 SAMPLE_SIZE = 100
+MIN_REVIEW_DATE = date(2017, 5, 1)
 MIN_LEN = 40   # minimum characters for a review to be understandable
 MIN_WORDS = 6  # minimum word count
+MAX_LEN = 700  # keep expert annotation readable and not too time-consuming
+MAX_WORDS = 120
 ASPECTS = ["Kenyamanan", "Kebersihan", "Pelayanan", "Harga", "Lokasi", "Fasilitas", "Makanan"]
 
 # Truncation / scraping artefacts that make a review confusing to annotate.
@@ -63,6 +67,19 @@ def read_csv(path):
         return list(csv.DictReader(f))
 
 
+def parse_review_date(value):
+    """Parse the date formats found in the clean dataset."""
+    text = (value or "").strip()
+    if not text:
+        return None
+    for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
 def is_good_quality(text):
     """Return True if the review text is clean enough for human annotation."""
     t = (text or "").strip()
@@ -89,6 +106,10 @@ def is_good_quality(text):
     words = re.findall(r"\w+", low)
     if len(words) < MIN_WORDS:
         return False
+    if len(t) > MAX_LEN:
+        return False
+    if len(words) > MAX_WORDS:
+        return False
 
     # 4. Mostly non-letters (e.g. emoji/symbol spam)
     letters = sum(c.isalpha() for c in t)
@@ -109,8 +130,13 @@ def main():
         if rid:
             clean_map[rid] = row
 
-    # Eligibility: labeled (>=1 aspect) AND present in clean AND good quality text.
+    # Eligibility:
+    # - labeled (>=1 aspect)
+    # - present in clean data
+    # - dated from May 2017 onward
+    # - readable enough for expert annotation
     eligible_ids = []
+    skipped_date = 0
     skipped_quality = 0
     for row in labeled:
         rid = str(row.get("ID_Review", "")).strip()
@@ -119,6 +145,10 @@ def main():
         has_aspect = any((row.get(a) or "").strip() for a in ASPECTS)
         if not has_aspect:
             continue
+        review_date = parse_review_date(clean_map[rid].get("date", ""))
+        if review_date is None or review_date < MIN_REVIEW_DATE:
+            skipped_date += 1
+            continue
         text = clean_map[rid].get("text_review", "")
         if not is_good_quality(text):
             skipped_quality += 1
@@ -126,8 +156,16 @@ def main():
         eligible_ids.append(rid)
 
     eligible_ids = sorted(set(eligible_ids), key=lambda x: int(x))
-    print(f"Eligible reviews (>=1 aspect, in clean, good quality): {len(eligible_ids)}")
+    print(
+        "Eligible reviews (>=1 aspect, in clean, "
+        f"date >= {MIN_REVIEW_DATE.isoformat()}, good quality): {len(eligible_ids)}"
+    )
+    print(f"Skipped because date is before May 2017 / invalid     : {skipped_date}")
     print(f"Skipped due to low quality / truncation / junk        : {skipped_quality}")
+    if len(eligible_ids) < SAMPLE_SIZE:
+        raise RuntimeError(
+            f"Only {len(eligible_ids)} eligible reviews found; need {SAMPLE_SIZE}."
+        )
 
     # Reproducible sampling.
     rng = random.Random(SEED)
