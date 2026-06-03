@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import reviewsData from "@/data/annotation_reviews.json";
 import { ANNOTATORS } from "@/lib/constants";
 import { loadStore, countCompleted } from "@/lib/storage";
 import { fetchProgress } from "@/lib/sync";
 import type { AnnotatorId } from "@/lib/types";
+
+const TOTAL_REVIEWS = reviewsData.length;
 
 interface UserProgress {
   id: AnnotatorId;
@@ -28,7 +31,7 @@ export default function ProgressDashboard() {
         id: a.id,
         label: a.label,
         completed: server[a.id]?.completed ?? 0,
-        total: 100,
+        total: TOTAL_REVIEWS,
         updatedAt: server[a.id]?.updated_at ?? null,
       }));
       setProgress(results);
@@ -41,7 +44,7 @@ export default function ProgressDashboard() {
           id: a.id,
           label: a.label,
           completed: countCompleted(store),
-          total: 100,
+          total: TOTAL_REVIEWS,
           updatedAt: null,
         };
       });

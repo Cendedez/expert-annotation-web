@@ -1,14 +1,14 @@
 # Panduan Anotasi ABSA Hotel Santika
 
 **Untuk:** Researcher, Expert 1, Expert 2  
-**Tugas:** Anotasi sentimen aspek pada 100 review hotel  
+**Tugas:** Anotasi sentimen aspek pada 50 review hotel  
 **Estimasi waktu:** 60–90 menit  
 
 ---
 
 ## Apa yang Anda Kerjakan?
 
-Anda diminta membaca 100 ulasan (review) pelanggan Hotel Santika dan memberikan label sentimen untuk **7 aspek** yang mungkin dibahas dalam setiap review.
+Anda diminta membaca 50 ulasan (review) pelanggan Hotel Santika dan memberikan label sentimen untuk **7 aspek** yang mungkin dibahas dalam setiap review.
 
 Tugas ini bertujuan mengukur seberapa konsisten penilaian manusia terhadap sentimen dalam teks, menggunakan metode **Cohen's Kappa**.
 
@@ -50,7 +50,7 @@ Setiap review menampilkan:
 
 ```
 ┌─────────────────────────────────────────┐
-│  Review 12 dari 100                     │
+│  Review 12 dari 50                      │
 │  ID: 1234 | Platform: Agoda             │
 │  Hotel: Hotel Santika Bandung           │
 │  Tanggal: 2024-01-15                    │
@@ -165,7 +165,7 @@ Setelah memberi label untuk satu review:
 
 Di bagian atas halaman terdapat:
 - **Progress bar** — menunjukkan persentase selesai
-- **Grid nomor 1–100** — hijau = sudah selesai, putih = belum
+- **Grid nomor 1–50** — hijau = sudah selesai, putih = belum
 
 Anda tidak harus mengerjakan secara berurutan. Bisa lompat ke nomor tertentu.
 
@@ -187,7 +187,7 @@ Lakukan backup setiap 20–30 review, atau setelah selesai semua.
 
 ## Langkah 9 — Export Hasil
 
-Setelah selesai 100 review:
+Setelah selesai 50 review:
 
 1. Klik **☰** → **📥 Export CSV**
 2. File `annotations_[nama_anda].csv` akan terunduh

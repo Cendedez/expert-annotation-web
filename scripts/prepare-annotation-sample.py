@@ -1,11 +1,11 @@
 """
-Prepare 100 review sample for expert annotation.
+Prepare 50 review sample for expert annotation.
 
 - Reads the labeled dataset to find reviews that have >= 1 aspect labeled.
 - Applies a QUALITY FILTER so only human-understandable reviews are eligible
   (no truncation markers like "selengkapnya"/"lihat lebih sedikit", no #NAME?
   errors, no overly-short or noisy text).
-- Samples 100 review_ids with a FIXED random seed (reproducible).
+- Samples 50 review_ids with a FIXED random seed (reproducible).
 - Joins with the clean dataset to get the display text/metadata.
 - Writes src/data/annotation_reviews.json WITHOUT any label info.
 
@@ -25,7 +25,7 @@ from datetime import date, datetime
 
 # --- configuration ---
 SEED = 42
-SAMPLE_SIZE = 100
+SAMPLE_SIZE = 50
 MIN_REVIEW_DATE = date(2017, 5, 1)
 MIN_LEN = 40   # minimum characters for a review to be understandable
 MIN_WORDS = 6  # minimum word count

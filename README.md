@@ -4,7 +4,7 @@ Website anotasi domain expert untuk validasi label **Aspect-Based Sentiment
 Analysis (ABSA)** review Hotel Santika, menggunakan **Cohen's Kappa** sebagai
 ukuran kesepakatan antar-anotator.
 
-Tiga user (`researcher`, `expert_1`, `expert_2`) menganotasi **100 review yang
+Tiga user (`researcher`, `expert_1`, `expert_2`) menganotasi **50 review yang
 sama** secara independen. Tidak ada label awal yang ditampilkan, sehingga
 penilaian setiap expert tidak bias.
 
@@ -84,7 +84,7 @@ npm run start
    - Output: `.next`
 4. Klik **Deploy**.
 
-Tidak perlu environment variable atau database. Data 100 review sudah
+Tidak perlu environment variable atau database. Data 50 review sudah
 ter-bundle di `src/data/annotation_reviews.json`.
 
 ---
@@ -116,9 +116,9 @@ ter-bundle di `src/data/annotation_reviews.json`.
 
 ---
 
-## 7. Regenerasi 100 Review (opsional)
+## 7. Regenerasi 50 Review (opsional)
 
-Sampel 100 review sudah dibuat di `src/data/annotation_reviews.json`
+Sampel 50 review sudah dibuat di `src/data/annotation_reviews.json`
 menggunakan **random seed tetap (42)** sehingga reproducible.
 
 Untuk membuat ulang:
@@ -130,7 +130,7 @@ python scripts/prepare-annotation-sample.py
 Script ini:
 1. Membaca `../Data Labeling/dataset_absa_labeled.csv`.
 2. Memfilter review yang punya **minimal 1 aspek terlabel**.
-3. Mengambil **100 review** dengan seed tetap.
+3. Mengambil **50 review** dengan seed tetap.
 4. Join ke `../Data Preprocessing/dataset_absa_santika_clean.csv` untuk teks.
 5. Menulis JSON **tanpa label** (hanya ID, Platform, Nama_Hotel, Review_Date,
    Text_Review).
@@ -165,7 +165,7 @@ expert-annotation-web/
 ├─ next.config.mjs
 ├─ README.md
 ├─ scripts/
-│  ├─ prepare-annotation-sample.py   # generate 100 review (seed tetap)
+│  ├─ prepare-annotation-sample.py   # generate 50 review (seed tetap)
 │  └─ compute-cohens-kappa.py        # hitung Cohen's Kappa
 └─ src/
    ├─ app/
@@ -177,7 +177,7 @@ expert-annotation-web/
    │  ├─ AspectForm.tsx
    │  └─ ProgressPanel.tsx
    ├─ data/
-   │  └─ annotation_reviews.json      # 100 review (TANPA label)
+   │  └─ annotation_reviews.json      # 50 review (TANPA label)
    └─ lib/
       ├─ types.ts
       ├─ constants.ts
@@ -188,7 +188,7 @@ expert-annotation-web/
 ## Catatan Metodologis
 
 Website ini **tidak** melatih expert mengikuti label awal. Setiap expert memberi
-anotasi independen terhadap 100 review yang sama. Hasil expert kemudian
+anotasi independen terhadap 50 review yang sama. Hasil expert kemudian
 dibandingkan dengan label awal (AI) dan antar-expert menggunakan Cohen's Kappa
 untuk mengukur tingkat kesepakatan anotasi.
 

@@ -53,7 +53,7 @@ export default function LandingPage() {
         </div>
 
         <p className="muted" style={{ fontSize: "0.8rem", marginTop: 24 }}>
-          Setiap user mengerjakan 100 review yang sama. Jawaban disimpan otomatis
+          Setiap user mengerjakan 50 review yang sama. Jawaban disimpan otomatis
           di browser (localStorage) dan dapat diekspor ke CSV.
         </p>
       </div>
