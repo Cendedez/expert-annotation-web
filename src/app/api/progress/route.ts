@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSupabase, ANNOTATIONS_TABLE } from "@/lib/supabaseServer";
-import { STORAGE_VERSION } from "@/lib/constants";
+import { PROGRESS_RESET_AT, STORAGE_VERSION } from "@/lib/constants";
 import type { AnnotationStore } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+const RESET_TIME = Date.parse(PROGRESS_RESET_AT);
 
 // GET /api/progress -> live completed counts for all annotators from the server.
 export async function GET() {
@@ -32,7 +33,11 @@ export async function GET() {
     const store = row.store as AnnotationStore | null;
     let completed = 0;
     if (store && store.records && (store.version ?? 1) >= STORAGE_VERSION) {
-      completed = Object.values(store.records).filter((r) => r.saved).length;
+      completed = Object.values(store.records).filter((r) => {
+        if (!r.saved || !r.annotated_at) return false;
+        const t = Date.parse(r.annotated_at);
+        return Number.isFinite(t) && t >= RESET_TIME;
+      }).length;
     }
     progress[row.annotator_id] = {
       completed,

@@ -1,14 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase, ANNOTATIONS_TABLE } from "@/lib/supabaseServer";
-import { STORAGE_VERSION } from "@/lib/constants";
+import { PROGRESS_RESET_AT, STORAGE_VERSION } from "@/lib/constants";
 import type { AnnotationStore, AnnotatorId, AnnotationRecord } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 const VALID_IDS: AnnotatorId[] = ["researcher", "expert_1", "expert_2"];
+const RESET_TIME = Date.parse(PROGRESS_RESET_AT);
 
 function isValidId(id: string | null): id is AnnotatorId {
   return id !== null && (VALID_IDS as string[]).includes(id);
+}
+
+function isRecordAfterReset(record: AnnotationRecord): boolean {
+  if (!record.annotated_at) return false;
+  const t = Date.parse(record.annotated_at);
+  return Number.isFinite(t) && t >= RESET_TIME;
+}
+
+function filterRecordsAfterReset(
+  records: Record<string, AnnotationRecord>
+): Record<string, AnnotationRecord> {
+  const filtered: Record<string, AnnotationRecord> = {};
+  for (const [reviewId, record] of Object.entries(records ?? {})) {
+    if (isRecordAfterReset(record)) filtered[reviewId] = record;
+  }
+  return filtered;
 }
 
 // Merge two stores at the record level, keeping the newest annotated_at per review.
@@ -16,8 +33,8 @@ function mergeRecords(
   a: Record<string, AnnotationRecord>,
   b: Record<string, AnnotationRecord>
 ): Record<string, AnnotationRecord> {
-  const out: Record<string, AnnotationRecord> = { ...a };
-  for (const [reviewId, recB] of Object.entries(b)) {
+  const out: Record<string, AnnotationRecord> = filterRecordsAfterReset(a);
+  for (const [reviewId, recB] of Object.entries(filterRecordsAfterReset(b))) {
     const recA = out[reviewId];
     if (!recA) {
       out[reviewId] = recB;
@@ -56,11 +73,19 @@ export async function GET(req: NextRequest) {
   }
 
   const store = (data?.store as AnnotationStore | undefined) ?? null;
+  if (!store) {
+    return NextResponse.json({ store: null });
+  }
   if (store && (store.version ?? 1) < STORAGE_VERSION) {
     return NextResponse.json({ store: null });
   }
 
-  return NextResponse.json({ store });
+  return NextResponse.json({
+    store: {
+      ...store,
+      records: filterRecordsAfterReset(store.records ?? {}),
+    },
+  });
 }
 
 // POST /api/annotations  body: { annotator, store }
@@ -107,9 +132,9 @@ export async function POST(req: NextRequest) {
 
   const mergedRecords =
     !serverStore || incomingVersion > serverVersion
-      ? incoming.records ?? {}
+      ? filterRecordsAfterReset(incoming.records ?? {})
       : incomingVersion < serverVersion
-        ? serverStore.records ?? {}
+        ? filterRecordsAfterReset(serverStore.records ?? {})
         : mergeRecords(serverStore.records ?? {}, incoming.records ?? {});
 
   const merged: AnnotationStore = {

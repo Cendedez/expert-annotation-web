@@ -33,6 +33,8 @@ export const ANNOTATORS: { id: AnnotatorId; label: string; description: string }
 
 export const STORAGE_VERSION = 2;
 
+export const PROGRESS_RESET_AT = "2026-06-03T03:44:05.446Z";
+
 export const ACTIVE_USER_KEY = "absa_active_annotator";
 
 export function storageKeyFor(annotator: AnnotatorId): string {

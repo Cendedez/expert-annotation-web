@@ -5,7 +5,15 @@ import type {
   AspectKey,
   SentimentLabel,
 } from "./types";
-import { ASPECTS, STORAGE_VERSION, storageKeyFor, ACTIVE_USER_KEY } from "./constants";
+import {
+  ACTIVE_USER_KEY,
+  ASPECTS,
+  PROGRESS_RESET_AT,
+  STORAGE_VERSION,
+  storageKeyFor,
+} from "./constants";
+
+const RESET_TIME = Date.parse(PROGRESS_RESET_AT);
 
 export function emptyLabels(): Record<AspectKey, SentimentLabel> {
   const labels = {} as Record<AspectKey, SentimentLabel>;
@@ -26,6 +34,22 @@ export function emptyStore(annotator: AnnotatorId): AnnotationStore {
   };
 }
 
+function isRecordAfterReset(record: AnnotationRecord): boolean {
+  if (!record.annotated_at) return false;
+  const t = Date.parse(record.annotated_at);
+  return Number.isFinite(t) && t >= RESET_TIME;
+}
+
+function filterRecordsAfterReset(
+  records: AnnotationStore["records"]
+): AnnotationStore["records"] {
+  const filtered: AnnotationStore["records"] = {};
+  for (const [reviewId, record] of Object.entries(records ?? {})) {
+    if (isRecordAfterReset(record)) filtered[reviewId] = record;
+  }
+  return filtered;
+}
+
 export function loadStore(annotator: AnnotatorId): AnnotationStore {
   if (typeof window === "undefined") return emptyStore(annotator);
   try {
@@ -38,7 +62,10 @@ export function loadStore(annotator: AnnotatorId): AnnotationStore {
     if (parsed.version !== STORAGE_VERSION) {
       return emptyStore(annotator);
     }
-    return parsed;
+    return {
+      ...parsed,
+      records: filterRecordsAfterReset(parsed.records),
+    };
   } catch {
     return emptyStore(annotator);
   }
@@ -72,7 +99,7 @@ export function clearActiveUser(): void {
 }
 
 export function countCompleted(store: AnnotationStore): number {
-  return Object.values(store.records).filter((r) => r.saved).length;
+  return Object.values(store.records).filter((r) => r.saved && isRecordAfterReset(r)).length;
 }
 
 // Merge two stores at the record level, keeping the newest annotated_at per review.
@@ -84,8 +111,8 @@ export function mergeStores(
   if (a.version > b.version) return a;
   if (b.version > a.version) return b;
 
-  const records: AnnotationStore["records"] = { ...a.records };
-  for (const [reviewId, recB] of Object.entries(b.records)) {
+  const records: AnnotationStore["records"] = filterRecordsAfterReset(a.records);
+  for (const [reviewId, recB] of Object.entries(filterRecordsAfterReset(b.records))) {
     const recA = records[reviewId];
     if (!recA) {
       records[reviewId] = recB;
