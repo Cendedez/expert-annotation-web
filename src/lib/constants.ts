@@ -31,12 +31,12 @@ export const ANNOTATORS: { id: AnnotatorId; label: string; description: string }
   },
 ];
 
-export const STORAGE_VERSION = 1;
+export const STORAGE_VERSION = 2;
 
 export const ACTIVE_USER_KEY = "absa_active_annotator";
 
 export function storageKeyFor(annotator: AnnotatorId): string {
-  return `absa_annotation_${annotator}`;
+  return `absa_annotation_v${STORAGE_VERSION}_${annotator}`;
 }
 
 // Human-readable sentiment options for the dropdown.

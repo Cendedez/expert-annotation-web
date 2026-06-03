@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabase, ANNOTATIONS_TABLE } from "@/lib/supabaseServer";
+import { STORAGE_VERSION } from "@/lib/constants";
 import type { AnnotationStore } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,7 @@ export async function GET() {
   for (const row of data ?? []) {
     const store = row.store as AnnotationStore | null;
     let completed = 0;
-    if (store && store.records) {
+    if (store && store.records && (store.version ?? 1) >= STORAGE_VERSION) {
       completed = Object.values(store.records).filter((r) => r.saved).length;
     }
     progress[row.annotator_id] = {

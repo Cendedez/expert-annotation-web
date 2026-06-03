@@ -35,6 +35,9 @@ export function loadStore(annotator: AnnotatorId): AnnotationStore {
     if (!parsed || typeof parsed !== "object" || !parsed.records) {
       return emptyStore(annotator);
     }
+    if (parsed.version !== STORAGE_VERSION) {
+      return emptyStore(annotator);
+    }
     return parsed;
   } catch {
     return emptyStore(annotator);
@@ -78,6 +81,9 @@ export function mergeStores(
   a: AnnotationStore,
   b: AnnotationStore
 ): AnnotationStore {
+  if (a.version > b.version) return a;
+  if (b.version > a.version) return b;
+
   const records: AnnotationStore["records"] = { ...a.records };
   for (const [reviewId, recB] of Object.entries(b.records)) {
     const recA = records[reviewId];

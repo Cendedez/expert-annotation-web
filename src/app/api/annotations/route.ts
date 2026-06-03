@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase, ANNOTATIONS_TABLE } from "@/lib/supabaseServer";
+import { STORAGE_VERSION } from "@/lib/constants";
 import type { AnnotationStore, AnnotatorId, AnnotationRecord } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -54,7 +55,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ store: data?.store ?? null });
+  const store = (data?.store as AnnotationStore | undefined) ?? null;
+  if (store && (store.version ?? 1) < STORAGE_VERSION) {
+    return NextResponse.json({ store: null });
+  }
+
+  return NextResponse.json({ store });
 }
 
 // POST /api/annotations  body: { annotator, store }
@@ -96,14 +102,19 @@ export async function POST(req: NextRequest) {
   }
 
   const serverStore = (existing?.store as AnnotationStore | undefined) ?? null;
+  const incomingVersion = incoming.version ?? 1;
+  const serverVersion = serverStore?.version ?? 1;
 
-  const mergedRecords = serverStore
-    ? mergeRecords(serverStore.records ?? {}, incoming.records ?? {})
-    : incoming.records ?? {};
+  const mergedRecords =
+    !serverStore || incomingVersion > serverVersion
+      ? incoming.records ?? {}
+      : incomingVersion < serverVersion
+        ? serverStore.records ?? {}
+        : mergeRecords(serverStore.records ?? {}, incoming.records ?? {});
 
   const merged: AnnotationStore = {
     annotator_id: annotator,
-    version: incoming.version ?? 1,
+    version: Math.max(incomingVersion, serverVersion, STORAGE_VERSION),
     records: mergedRecords,
     updated_at: new Date().toISOString(),
   };
